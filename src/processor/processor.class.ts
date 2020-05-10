@@ -1,8 +1,8 @@
-import { TaskRepository, Task } from '../shared';
+import { TaskRepository, Task, Milliseconds, Seconds } from '../shared';
 import { ILogger } from '@skeleton/logger';
 import { ProcessorConfig } from './processor-config.interface';
 import { AsyncResult, Result } from '@skeleton/common';
-import { DEFAULT_PROCESSOR_POLLING_INTERVAL, DEFAULT_PREFETCH } from './constants';
+import { DEFAULT_PROCESSOR_POLLING_INTERVAL, DEFAULT_PREFETCH, DEFAULT_CACHE_TTL } from './constants';
 import { delay } from '@libs/common';
 import _ from 'lodash';
 
@@ -10,6 +10,7 @@ export abstract class Processor<TInput, TOutput> {
   
   private readonly repo: TaskRepository<TInput, TOutput>;
   private activeTasks: Array<AsyncResult<TOutput>>;
+  private cacheTTL: Seconds;
 
   public constructor (
     private readonly logger: ILogger,
@@ -19,7 +20,17 @@ export abstract class Processor<TInput, TOutput> {
   )  {
     this.repo = new TaskRepository<TInput, TOutput>(this.config.queue, logger);
     this.activeTasks = [];
-    console.log('activeTasks', this.activeTasks.length);
+    this.cacheTTL = this.getCacheTTL();
+  }
+
+  private getCacheTTL (): Seconds | null {
+    const useCache = _.get(this, 'config.caching.useCaching');
+    const ttl = _.get(this, 'config.caching.ttl');
+    return ttl || (useCache ? DEFAULT_CACHE_TTL : null);
+  }
+
+  private get useCache (): boolean {
+    return !!this.cacheTTL;
   }
 
   protected abstract process (input: TInput): AsyncResult<TOutput>
@@ -28,7 +39,7 @@ export abstract class Processor<TInput, TOutput> {
     task: Task<TInput, TOutput>
   ) {
     task.setInProgress();
-    const response = await this.repo.save(task);
+    await this.repo.save(task);
     this.logger.info(`Task id = ${task.id} set status: IN_PROGRESS`);
   }
 
@@ -39,8 +50,11 @@ export abstract class Processor<TInput, TOutput> {
   ) {
     this.logger.debug('Setting to done.');
     task.setDone(result.data);
-    const r = await this.repo.save(task);
+    await this.repo.save(task);
     this.logger.debug(`Task id = ${task.id} set status: DONE`);
+    if (this.useCache) {
+      await this.repo.createCacheReference(task, this.cacheTTL);
+    }
     resolve(result);
   }
 
@@ -51,7 +65,7 @@ export abstract class Processor<TInput, TOutput> {
   ) {
     this.logger.info('Moving to failed.');
     task.setFailed(result.error);
-    const r = await this.repo.save(task);
+    await this.repo.save(task);
     this.logger.debug('Moved to failed.');
     resolve(result);
   }

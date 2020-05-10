@@ -1,4 +1,4 @@
-import { Milliseconds } from 'src/shared';
+import { Milliseconds } from '../shared';
 
 export interface ProcessorPollingConfig {
   interval?: Milliseconds;

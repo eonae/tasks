@@ -1,11 +1,11 @@
 import { InvalidTransitionException } from './exceptions';
-import { TaskMetadata, TaskStatus } from './types';
+import { TaskMetadata, TaskStatus, TaskId } from './types';
 import { ErrorLike, Result } from '@skeleton/common';
 import { v4 } from 'uuid';
 
 export class Task<TInput, TOutput> {
 
-  private _id: string;
+  private _id: TaskId;
   private _createdAt: number;
   private _updatedAt: number;
   private _takenAt: number;
@@ -22,7 +22,7 @@ export class Task<TInput, TOutput> {
       status: this._status
     }
   }
-  public get id (): string { return this._id }
+  public get id (): TaskId { return this._id }
   public get status (): TaskStatus { return this._status }
   public get isNew (): boolean { return !this._createdAt }
   public get input (): TInput { return this._input }

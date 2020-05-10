@@ -1,6 +1,6 @@
-import { DEFAULT_CLIENT_TIMEOUT, DEFAULT_CLIENT_POLLING_INTERVAL, DEFAULT_CACHE_TTL } from './constants';
+import { DEFAULT_CLIENT_TIMEOUT, DEFAULT_CLIENT_POLLING_INTERVAL, DEFAULT_CACHE_TTL, DEFAULT_CACHE_MAX_AGE } from './constants';
 import { PollingTimeoutException, CancelledException } from './exceptions';
-import { Task, TaskStatus, TaskRepository, Priority, TaskNotFoundException, Milliseconds } from '../shared';
+import { Task, TaskStatus, TaskRepository, Priority, TaskNotFoundException, Milliseconds, TaskId, Seconds } from '../shared';
 import { ClientConfig, TaskResult } from './types';
 import { IDisposable } from '@skeleton/common';
 import { ILogger } from '@skeleton/logger';
@@ -12,7 +12,7 @@ export class Client<TInput, TOutput> implements IDisposable {
   private readonly repo: TaskRepository<TInput, TOutput>;
   private readonly timeout: Milliseconds;
   private readonly pollingInterval: Milliseconds;
-  private readonly cacheTTL: Milliseconds;
+  private readonly cacheMaxAge: Seconds;
 
   public constructor (
     private readonly logger: ILogger,
@@ -23,14 +23,21 @@ export class Client<TInput, TOutput> implements IDisposable {
     this.repo = new TaskRepository<TInput, TOutput>(this.config.queue, logger);
     this.timeout = this.getTimeout();
     this.pollingInterval = this.getPollingInterval();
-    this.cacheTTL = this.getCacheTTL();
+    this.cacheMaxAge = this.getCacheMaxAge();
   }
 
-  private getCacheTTL (): Milliseconds | null {
-    
-    const useCache = _.get(this, 'this.config.caching.useCaching');
-    const ttl = _.get(this, 'this.config.caching.ttl');
-    return ttl || (useCache ? DEFAULT_CACHE_TTL : null);
+  private get allowCache () {
+    return !!this.cacheMaxAge;
+  }
+
+  private get useTimeout () {
+    return !!this.timeout;
+  }
+
+  private getCacheMaxAge (): Seconds | null {
+    const allow = _.get(this, 'config.caching.allow');
+    const max = _.get(this, 'config.caching.max');
+    return max || (allow ? DEFAULT_CACHE_MAX_AGE : null);
   }
 
   private getTimeout (): Milliseconds | null {
@@ -44,17 +51,23 @@ export class Client<TInput, TOutput> implements IDisposable {
   } 
 
   private getDeadline (): number | null {
-    return this.timeout ? (Date.now() + this.timeout) : null;
+    return this.useTimeout
+      ? (Date.now() + this.timeout)
+      : null;
   }
 
-  async createTask(input: TInput, priority?: Priority): Promise<string> {
+  async createTask(input: TInput, priority?: Priority): Promise<TaskId> {
+    if (this.allowCache) {
+      const cachedTaskId = this.repo.checkCache(input, this.cacheMaxAge);
+      if (cachedTaskId !== null) return cachedTaskId;
+    }
     const task = Task.create<TInput, TOutput>(input);
     await this.repo.save(task);
     await this.repo.push(task, priority || Priority.low);
     return task.id;
   }
 
-  async getTask(id: string): Promise<TaskResult<TOutput>> {
+  async getTask(id: TaskId): Promise<TaskResult<TOutput>> {
     const task = await this.repo.get(id);
     return {
       status: task.status,
