@@ -1,6 +1,6 @@
 import { Seconds } from '../shared';
 
 export interface ProcessorCachingConfig {
-  cacheResults: true,
+  useCache: true,
   ttl?: Seconds
 }

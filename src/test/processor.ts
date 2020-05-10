@@ -33,6 +33,10 @@ const main = async () => {
       interval: 1000
     },
     prefetch: 2,
+    caching: {
+      useCache: true,
+      // ttl: 10
+    }
 
     // polling: {
     //   timeout: {

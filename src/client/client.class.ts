@@ -58,9 +58,11 @@ export class Client<TInput, TOutput> implements IDisposable {
 
   async createTask(input: TInput, priority?: Priority): Promise<TaskId> {
     if (this.allowCache) {
-      const cachedTaskId = this.repo.checkCache(input, this.cacheMaxAge);
+      this.logger.info('Checking hash...');
+      const cachedTaskId = await this.repo.checkCache(input, this.cacheMaxAge);
       if (cachedTaskId !== null) return cachedTaskId;
     }
+    this.logger.debug('Creating new task');
     const task = Task.create<TInput, TOutput>(input);
     await this.repo.save(task);
     await this.repo.push(task, priority || Priority.low);
@@ -95,7 +97,6 @@ export class Client<TInput, TOutput> implements IDisposable {
           this.logger.debug(`status: ${task.status}`);
           if (!task.isFinished) continue;
           this.logger.info('Task is done');
-          console.log(task.output);
           switch (task.status) {
             case TaskStatus.done: return resolve(task.output.data);
             case TaskStatus.failed: return reject(task.output.error);

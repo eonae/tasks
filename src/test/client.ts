@@ -14,7 +14,7 @@ const main = async () => {
     queue: {
       name: 'test',
       connection: 'redis://localhost:6380',
-      ttl: 60 // seconds
+      // ttl: 60 // seconds
     },
     polling: {
       timeout: {
@@ -22,6 +22,10 @@ const main = async () => {
       },
       interval: 1000
     },
+    caching: {
+      allow: true,
+      // max: 10
+    }
     // polling: {
     //   timeout: {
     //     msec: 2000
@@ -32,18 +36,14 @@ const main = async () => {
 
   const client = new Client<TestInput, TestOutput>(logger, TestInput, TestOutput, config);
 
-  // const id = await client.createTask(new TestInput());
-  // console.log('task id:', id);
   try {
     if (process.argv[2] === 'push') {
       const n = process.argv[3] ? +process.argv[3] : 1;
       for (let i = 0; i < n; i++) {
         const taskId = await client.createTask(new TestInput());
-        console.log('task id:', taskId);
       }
     } else if (process.argv[2] === 'await') {
       const taskResult = await client.awaitTask(new TestInput(), Priority.medium);
-      console.log('task result:', taskResult);
     }
   } catch (error) {
     logger.error(error);

@@ -24,7 +24,7 @@ export abstract class Processor<TInput, TOutput> {
   }
 
   private getCacheTTL (): Seconds | null {
-    const useCache = _.get(this, 'config.caching.useCaching');
+    const useCache = _.get(this, 'config.caching.useCache');
     const ttl = _.get(this, 'config.caching.ttl');
     return ttl || (useCache ? DEFAULT_CACHE_TTL : null);
   }
@@ -72,7 +72,6 @@ export abstract class Processor<TInput, TOutput> {
 
   public async run (): Promise<void> {
     
-    console.log(this.activeTasks.length);
     this.logger.info(`Worker pid = ${process.pid} started...`);
     const interval = _.get(this, 'config.polling.interval')
                   || DEFAULT_PROCESSOR_POLLING_INTERVAL;
@@ -93,7 +92,7 @@ export abstract class Processor<TInput, TOutput> {
       }
       const task = await this.repo.get(taskId);
       if (!task || task.isFinished) {
-        console.log('Skipping');
+        this.logger.info(`Couldn't find data for task id = ${taskId}. Probably it's ttl expired. Skipping...`);
         continue;
       }
       await this.setInProcess(task);

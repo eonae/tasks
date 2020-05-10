@@ -47,8 +47,7 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
     priority: Priority
   ): Promise<void> {
     const queueKey = this.getQueueKey(priority);
-    const result = await this.redis.lpush(queueKey, task.id);
-    console.log(result); // FIXME
+    await this.redis.lpush(queueKey, task.id);
     this.logger.info('Task pushed to queue.');
   }
 
@@ -147,13 +146,12 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
     this.logger.debug(`Saving task isNew = ${task.isNew}`);
     const dataKey = this.getDataKey(task.id);
     task.updateTimestamps();
-    const rData = await this.redis.multi()
+    await this.redis.multi()
       .hset(dataKey, 'input', JSON.stringify(task.input))
       .hset(dataKey, 'output', JSON.stringify(task.output))
       .hset(dataKey, 'metadata', JSON.stringify(task.metadata))
       .exec();
     this.logger.debug('Task data saved.');
-    console.log('save result:', rData); // FIXME: debug;
     // We need to use the flag saved before
     if (isNew) {
       const ttl = this.queue.ttl || DEFAULT_TTL;
