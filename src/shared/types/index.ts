@@ -1,4 +1,3 @@
-export * from './task-metadata.interface';
 export * from './task-queue-config.interface';
 export * from './task-status.enum';
 export * from './priority.enum';

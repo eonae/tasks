@@ -1,11 +1,13 @@
 import { DEFAULT_CLIENT_TIMEOUT, DEFAULT_CLIENT_POLLING_INTERVAL, DEFAULT_CACHE_TTL, DEFAULT_CACHE_MAX_AGE } from './constants';
-import { PollingTimeoutException, CancelledException } from './exceptions';
+import { PollingTimeoutException, CancelledException, OutputValidationException } from './exceptions';
 import { Task, TaskStatus, TaskRepository, Priority, TaskNotFoundException, Milliseconds, TaskId, Seconds } from '../shared';
 import { ClientConfig, TaskResult } from './types';
 import { IDisposable } from '@skeleton/common';
 import { ILogger } from '@skeleton/logger';
 import { delay } from '@libs/common';
 import _ from 'lodash';
+import { validate, ValidationError } from 'class-validator';
+import { plainToClass } from 'class-transformer';
 
 export class Client<TInput, TOutput> implements IDisposable {
 
@@ -58,7 +60,7 @@ export class Client<TInput, TOutput> implements IDisposable {
 
   async createTask(input: TInput, priority?: Priority): Promise<TaskId> {
     if (this.allowCache) {
-      this.logger.info('Checking hash...');
+      this.logger.debug('Checking cache...');
       const cachedTaskId = await this.repo.checkCache(input, this.cacheMaxAge);
       if (cachedTaskId !== null) return cachedTaskId;
     }
@@ -71,6 +73,7 @@ export class Client<TInput, TOutput> implements IDisposable {
 
   async getTask(id: TaskId): Promise<TaskResult<TOutput>> {
     const task = await this.repo.get(id);
+    // TODO: Error handling and validation;
     return {
       status: task.status,
       output: task.output
@@ -90,22 +93,36 @@ export class Client<TInput, TOutput> implements IDisposable {
             // Should we really update task status here? to cancelled?
             return reject(new PollingTimeoutException(id, this.timeout));
           }
-          
-          this.logger.debug(`Quering task`);
+          this.logger.debug(`Quering task id = ${id}...`);
           const task = await this.repo.get(id);
           if (!task) throw new TaskNotFoundException(id);
           this.logger.debug(`status: ${task.status}`);
           if (!task.isFinished) continue;
-          this.logger.info('Task is done');
+          this.logger.info('Task is done.');
           switch (task.status) {
-            case TaskStatus.done: return resolve(task.output.data);
-            case TaskStatus.failed: return reject(task.output.error);
-            case TaskStatus.canceled: return reject(new CancelledException(task.id));
+            case TaskStatus.done: {
+              const output = plainToClass(this.outputCtor, task.output.data);
+              const errors = await validate(output);
+              if (errors.length > 0) {
+                const exception = new OutputValidationException(task.id, errors);
+                this.logger.error(exception);
+                reject(exception);
+                return;
+              } else {
+                resolve(output);
+                return;
+              }
+            }
+            case TaskStatus.failed:
+              reject(task.output.error);
+              return;
+            case TaskStatus.canceled: 
+              reject(new CancelledException(task.id));
+              return;
           }
         } catch (error) {
-          return reject(error);
+          reject(error);
         }
-
       }
     });
   }

@@ -13,24 +13,24 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@libs/common": "^0.3.4",
-    "@skeleton/common": "^0.4.4",
-    "@skeleton/logger": "^0.3.5",
+    "@libs/common": "^0.3.5",
+    "@skeleton/common": "^0.4.7",
+    "@skeleton/logger": "0.3.8",
     "@types/lodash": "^4.14.150",
     "@types/md5": "^2.2.0",
     "@types/wtfnode": "^0.7.0",
-    "class-transformer": "^0.2.3",
-    "class-validator": "^0.12.2",
-    "ioredis": "^4.16.3",
-    "lodash": "^4.17.15",
-    "md5": "^2.2.1",
-    "redis": "^3.0.2",
-    "uuid": "^8.0.0",
-    "wtfnode": "^0.8.1"
+    "class-transformer": "0.2.3",
+    "class-validator": "0.12.2",
+    "ioredis": "4.16.3",
+    "lodash": "4.17.15",
+    "md5": "2.2.1",
+    "redis": "3.0.2",
+    "uuid": "8.0.0",
+    "wtfnode": "0.8.1"
   },
   "devDependencies": {
-    "@types/ioredis": "^4.16.1",
-    "@types/redis": "^2.8.20",
-    "@types/uuid": "^7.0.3"
+    "@types/ioredis": "4.16.1",
+    "@types/redis": "2.8.20",
+    "@types/uuid": "7.0.3"
   }
 }

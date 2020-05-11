@@ -4,7 +4,10 @@ import { ProcessorConfig } from './processor-config.interface';
 import { AsyncResult, Result } from '@skeleton/common';
 import { DEFAULT_PROCESSOR_POLLING_INTERVAL, DEFAULT_PREFETCH, DEFAULT_CACHE_TTL } from './constants';
 import { delay } from '@libs/common';
+import { plainToClass } from 'class-transformer';
 import _ from 'lodash';
+import { validate } from 'class-validator';
+import { InputValidationException } from './exceptions';
 
 export abstract class Processor<TInput, TOutput> {
   
@@ -40,7 +43,7 @@ export abstract class Processor<TInput, TOutput> {
   ) {
     task.setInProgress();
     await this.repo.save(task);
-    this.logger.info(`Task id = ${task.id} set status: IN_PROGRESS`);
+    this.logger.debug(`Task id = ${task.id} set status: IN_PROGRESS`);
   }
 
   private async setDone (
@@ -48,13 +51,13 @@ export abstract class Processor<TInput, TOutput> {
     result: Result<TOutput>,
     resolve: Function
   ) {
-    this.logger.debug('Setting to done.');
     task.setDone(result.data);
     await this.repo.save(task);
     this.logger.debug(`Task id = ${task.id} set status: DONE`);
     if (this.useCache) {
       await this.repo.createCacheReference(task, this.cacheTTL);
     }
+    this.logger.debug({ 'Process successfull': result.data });
     resolve(result);
   }
 
@@ -63,62 +66,71 @@ export abstract class Processor<TInput, TOutput> {
     result: Result<TOutput>,
     resolve: Function
   ) {
-    this.logger.info('Moving to failed.');
     task.setFailed(result.error);
     await this.repo.save(task);
-    this.logger.debug('Moved to failed.');
+    this.logger.debug(`Task id = ${task.id} set status: FAILED`);
     resolve(result);
   }
 
   public async run (): Promise<void> {
     
     this.logger.info(`Worker pid = ${process.pid} started...`);
-    const interval = _.get(this, 'config.polling.interval')
-                  || DEFAULT_PROCESSOR_POLLING_INTERVAL;
+    const interval =
+      _.get(this, 'config.polling.interval') || DEFAULT_PROCESSOR_POLLING_INTERVAL;
     const prefetch = this.config.prefetch || DEFAULT_PREFETCH;
     while (true) {
-      await delay(interval);
-      this.logger.debug(`Prefetch: ${prefetch}`);
-      this.logger.debug(`Active tasks count: ${this.activeTasks.length}`);
-      if (this.activeTasks.length >= prefetch) {
-        this.logger.info(`Worker pid = ${process.pid} is busy (prefetch = ${prefetch})`);
-        continue;
-      }
-      this.logger.debug(`Polling delay ${interval} msec...`);
-      const taskId = await this.repo.pop();
-      if (!taskId) {
-        this.logger.debug('No task.');
-        continue;
-      }
-      const task = await this.repo.get(taskId);
-      if (!task || task.isFinished) {
-        this.logger.info(`Couldn't find data for task id = ${taskId}. Probably it's ttl expired. Skipping...`);
-        continue;
-      }
-      await this.setInProcess(task);
-
-      // Validate
-      const promise = new Promise<Result<TOutput>>(async resolve => {
-        try {
-          let result: Result<TOutput>;
+      try {
+        this.logger.debug(`Polling delay ${interval} msec...`);
+        await delay(interval);
+        this.logger.debug(`Active tasks: ${this.activeTasks.length}/${prefetch}`);
+        if (this.activeTasks.length >= prefetch) {
+          this.logger.warn(`Worker pid = ${process.pid} is busy.`);
+          continue;
+        }
+        const taskId = await this.repo.pop();
+        if (!taskId) {
+          this.logger.debug('No task.');
+          continue;
+        }
+        const task = await this.repo.get(taskId);
+        if (!task || task.isFinished) {
+          this.logger.warn(`Couldn't find data for task id = ${taskId}. Probably it's ttl expired. Skipping...`);
+          continue;
+        }
+        await this.setInProcess(task);
+  
+        const promise = new Promise<Result<TOutput>>(async resolve => {
+          // TODO: Вынести в отдельный метод (или класс?);
+          // CHECKME: не будет ли здесь проблем из-за замыкания?
+          const input = plainToClass(this.inputCtor, task.input);
+          const errors = await validate(input);
+          if (errors.length > 0) {
+            const exception = new InputValidationException(task.id, errors);
+            this.logger.error(exception);
+            this.setFailed(task, Result.error(exception), resolve);
+          }
           try {
-            result = await this.process(task.input);
+            let result: Result<TOutput>;
+            try {
+              result = await this.process(task.input);
+            } catch (error) {
+              await this.setFailed(task, Result.error(error), resolve);
+            }
+            if (result.isError) {
+              await this.setFailed(task, result, resolve);
+            } else {
+              await this.setDone(task, result, resolve);
+            }
           } catch (error) {
-            await this.setFailed(task, Result.error(error), resolve);
-          }
-          this.logger.debug(result);
-          if (result.isError) {
-            await this.setFailed(task, result, resolve);
-          } else {
-            await this.setDone(task, result, resolve);
-          }
-        } catch (error) {
-          resolve(Result.error(error));
-        } finally {
-          this.activeTasks = this.activeTasks.filter(p => p !== promise);
-        }      
-      });
-      this.activeTasks.push(promise);
+            resolve(Result.error(error));
+          } finally {
+            this.activeTasks = this.activeTasks.filter(p => p !== promise);
+          }      
+        });
+        this.activeTasks.push(promise);        
+      } catch (error) {
+        this.logger.error(error);
+      }
     }
   }
 }

@@ -3,12 +3,12 @@ import { Client, ClientConfig } from '../client';
 import { TestOutput, TestInput } from './dto';
 import { Priority } from '../shared';
 
-const main = async () => {
+const logger = new Logger({
+  level: 'debug',
+  formatter: LogFormat.friendly
+}, 'CLIENT');
 
-  const logger = new Logger({
-    level: 'debug',
-    formatter: LogFormat.friendly
-  }, 'CLIENT');
+const main = async () => {
 
   const config: ClientConfig = {
     queue: {
@@ -36,14 +36,22 @@ const main = async () => {
 
   const client = new Client<TestInput, TestOutput>(logger, TestInput, TestOutput, config);
 
+  const input = new TestInput();
+  input.template = '<div></div>';
+  input.data = {};
+  input.format = 'xlsx';
+
+
   try {
     if (process.argv[2] === 'push') {
       const n = process.argv[3] ? +process.argv[3] : 1;
       for (let i = 0; i < n; i++) {
-        const taskId = await client.createTask(new TestInput());
+        const taskId = await client.createTask(input);
+        logger.info(taskId);
       }
     } else if (process.argv[2] === 'await') {
-      const taskResult = await client.awaitTask(new TestInput(), Priority.medium);
+      const taskResult = await client.awaitTask(input, Priority.medium);
+      logger.info(taskResult);
     }
   } catch (error) {
     logger.error(error);

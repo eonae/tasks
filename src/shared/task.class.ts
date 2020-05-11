@@ -1,5 +1,6 @@
 import { InvalidTransitionException } from './exceptions';
-import { TaskMetadata, TaskStatus, TaskId } from './types';
+import { TaskMetadata } from './task-metadata.class';
+import { TaskStatus, TaskId } from './types';
 import { ErrorLike, Result } from '@skeleton/common';
 import { v4 } from 'uuid';
 

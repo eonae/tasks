@@ -1,12 +1,16 @@
-import { IDisposable, Result, DomainException } from '@skeleton/common';
+import { IDisposable, Result } from '@skeleton/common';
 import { ILogger } from '@skeleton/logger';
 import { DEFAULT_TTL } from './constants';
-import { TaskQueueConfig, TaskMetadata, Milliseconds, TaskId, Seconds } from './types';
+import { TaskQueueConfig, TaskId, Seconds } from './types';
 import { Task } from './task.class';
 import Redis from 'ioredis';
 import { Priority } from './types';
-import { enumValues } from './helpers';
 import md5 from 'md5';
+import { TaskMetadata } from './task-metadata.class';
+import { plainToClass } from 'class-transformer';
+import { validate } from 'class-validator';
+import { InvalidMetadataException } from './exceptions/invalid-metadata.exception';
+import { enumValues } from '@libs/common';
 
 export class TaskRepository<TInput, TOutput> implements IDisposable {
 
@@ -34,12 +38,18 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
   public async get(id: TaskId): Promise<Task<TInput, TOutput>> {
   
     const dataKey = this.getDataKey(id);
-    const meta = await this.hgetAndParse<TaskMetadata>(dataKey, 'metadata');
-    if (!meta) return null;
+    const rawMetadata = await this.hgetAndParse<any>(dataKey, 'metadata');
+
+    if (!rawMetadata) return null;
+    const metadata = plainToClass(TaskMetadata, rawMetadata);
+    const errors = await validate(metadata);
+    if (errors.length > 0) {
+      throw new InvalidMetadataException(id, errors);
+    }
     const input = await this.hgetAndParse<TInput>(dataKey, 'input');
     const output = await this.hgetAndParse<Result<TOutput>>(dataKey, 'output');
 
-    return Task.parse(meta, input, output);
+    return Task.parse(metadata, input, output);
   }
 
   public async push (
@@ -48,7 +58,7 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
   ): Promise<void> {
     const queueKey = this.getQueueKey(priority);
     await this.redis.lpush(queueKey, task.id);
-    this.logger.info('Task pushed to queue.');
+    this.logger.debug('Task pushed to queue.');
   }
 
   public async pop (): Promise<TaskId> {
@@ -56,8 +66,11 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
       .map(p => this.getQueueKey(p as Priority));
     for (let queue of queues) {
       const taskId = await this.redis.rpop(queue);
-      this.logger.debug(`Checked queue ${queue}. Got ${taskId}`);
-      if (taskId !== null) return taskId;        
+      this.logger.debug(`Checking queue ${queue}...`);
+      if (taskId !== null) {
+        this.logger.debug(`Popped new task id = ${taskId}`);
+        return taskId;
+      }
     }
     return null;
   }
@@ -165,7 +178,7 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
   dispose(): Promise<void> {
     return new Promise(resolve => {
       this.redis.on('close', () => {
-        this.logger.info('Redis client dispose');
+        this.logger.info('Redis client is disposed.');
         resolve();
       });
       this.redis.disconnect();
