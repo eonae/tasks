@@ -7,7 +7,7 @@ import { delay } from '@libs/common';
 export class ProcessorImplementation extends Processor<TestInput, TestOutput> {
   
   constructor (logger: ILogger, config: ProcessorConfig) {
-    super(logger, TestInput, TestOutput, config);
+    super(TestInput, logger, config);
   }
 
   protected async process (input: TestInput): AsyncResult<TestOutput> {

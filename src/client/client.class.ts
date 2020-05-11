@@ -17,9 +17,8 @@ export class Client<TInput, TOutput> implements IDisposable {
   private readonly cacheMaxAge: Seconds;
 
   public constructor (
-    private readonly logger: ILogger,
-    private readonly inputCtor: new () => TInput,
     private readonly outputCtor: new () => TOutput,
+    private readonly logger: ILogger,
     private readonly config: ClientConfig
   ) {
     this.repo = new TaskRepository<TInput, TOutput>(this.config.queue, logger);

@@ -34,7 +34,7 @@ const main = async () => {
     // }
   };
 
-  const client = new Client<TestInput, TestOutput>(logger, TestInput, TestOutput, config);
+  const client = new Client<TestInput, TestOutput>(TestOutput, logger, config);
 
   const input = new TestInput();
   input.template = '<div></div>';
@@ -60,7 +60,7 @@ const main = async () => {
   await client.dispose();
 }
 
-main();
+// main();
 
 /*
 Need to test:

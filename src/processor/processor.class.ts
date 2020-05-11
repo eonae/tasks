@@ -16,9 +16,8 @@ export abstract class Processor<TInput, TOutput> {
   private cacheTTL: Seconds;
 
   public constructor (
-    private readonly logger: ILogger,
     private readonly inputCtor: new () => TInput,
-    private readonly outputCtor: new () => TOutput,
+    private readonly logger: ILogger,
     private readonly config: ProcessorConfig
   )  {
     this.repo = new TaskRepository<TInput, TOutput>(this.config.queue, logger);
