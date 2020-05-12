@@ -1,16 +1,18 @@
+
 import { IDisposable, Result } from '@skeleton/common';
+import { validate } from 'class-validator';
 import { ILogger } from '@skeleton/logger';
-import { DEFAULT_TTL } from './constants';
-import { TaskQueueConfig, TaskId, Seconds } from './types';
-import { Task } from './task.class';
+import { enumValues } from '@libs/common';
 import Redis from 'ioredis';
-import { Priority } from './types';
 import md5 from 'md5';
+
+import { TaskQueueConfig, TaskId, Seconds } from './types';
+import { InvalidMetadataException } from './exceptions';
 import { TaskMetadata } from './task-metadata.class';
 import { plainToClass } from 'class-transformer';
-import { validate } from 'class-validator';
-import { InvalidMetadataException } from './exceptions/invalid-metadata.exception';
-import { enumValues } from '@libs/common';
+import { DEFAULT_TTL } from './constants';
+import { Task } from './task.class';
+import { Priority } from './types';
 
 export class TaskRepository<TInput, TOutput> implements IDisposable {
 
@@ -75,10 +77,6 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
     return null;
   }
 
-  private getInputHash (input: TInput): Promise<string> {
-    return Promise.resolve(md5(JSON.stringify(input)));
-  }
-
   public async createCacheReference (task: Task<TInput, TOutput>, ttl: number): Promise<void> {
 
     const inputHash = await this.getInputHash(task.input);
@@ -138,21 +136,6 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
     return taskId;
   }
 
-  /////////
-  /*
-    Размышления о кешировании.
-    В кеше появляются результаты, когда процессор успешно заканчивает задачу - остальное сложно.
-    Поэтому по идее настройка кеширования должна быть и в клиенте и в процессоре.
-    В клиенте - хочет ли клиент ходить в кеш (и какая свежесть кеша его устраивает),
-    а в процессоре - доступно ли кеширование вообще для данного вида работ.
-
-    Может быть определённая "некрасивость" в том, что клиент скажет - да, хочу кеш, а воркер этот кеш не
-    поддерживает.
-
-    Кроме кеширования осталась ещё валидация!!!
-    И логи подправить.ы
-  */
-
   public async save (task: Task<TInput, TOutput>): Promise<Task<TInput, TOutput>> {
     // We need to save this because it'll be changed during updateTimestamps();
     const isNew = task.isNew;
@@ -175,7 +158,7 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
     return task;
   }
 
-  dispose(): Promise<void> {
+  public dispose(): Promise<void> {
     return new Promise(resolve => {
       this.redis.on('close', () => {
         this.logger.info('Redis client is disposed.');
@@ -183,5 +166,9 @@ export class TaskRepository<TInput, TOutput> implements IDisposable {
       });
       this.redis.disconnect();
     })
+  }
+
+  private getInputHash (input: TInput): Promise<string> {
+    return Promise.resolve(md5(JSON.stringify(input)));
   }
 }

@@ -98,7 +98,6 @@ export class Task<TInput, TOutput> {
     task._status = meta.status;
     task._input = input;
     task._output = output;
-    // Validate?
     return task;
   }
 

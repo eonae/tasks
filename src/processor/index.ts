@@ -1,4 +1,4 @@
-export * from './processor-config.interface';
-export * from './processor-polling-config.interface';
-export * from './processor-caching-config';
+export * from './types/processor-config.interface';
+export * from './types/processor-polling-config.interface';
+export * from './types/processor-caching-config.inteface';
 export * from './processor.class';

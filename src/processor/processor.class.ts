@@ -1,6 +1,6 @@
 import { TaskRepository, Task, Milliseconds, Seconds } from '../shared';
 import { ILogger } from '@skeleton/logger';
-import { ProcessorConfig } from './processor-config.interface';
+import { ProcessorConfig } from './types/processor-config.interface';
 import { AsyncResult, Result } from '@skeleton/common';
 import { DEFAULT_PROCESSOR_POLLING_INTERVAL, DEFAULT_PREFETCH, DEFAULT_CACHE_TTL } from './constants';
 import { delay } from '@libs/common';

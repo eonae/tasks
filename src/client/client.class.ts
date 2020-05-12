@@ -16,6 +16,14 @@ export class Client<TInput, TOutput> implements IDisposable {
   private readonly pollingInterval: Milliseconds;
   private readonly cacheMaxAge: Seconds;
 
+  private get allowCache () {
+    return !!this.cacheMaxAge;
+  }
+
+  private get useTimeout () {
+    return !!this.timeout;
+  }
+
   public constructor (
     private readonly outputCtor: new () => TOutput,
     private readonly logger: ILogger,
@@ -27,37 +35,7 @@ export class Client<TInput, TOutput> implements IDisposable {
     this.cacheMaxAge = this.getCacheMaxAge();
   }
 
-  private get allowCache () {
-    return !!this.cacheMaxAge;
-  }
-
-  private get useTimeout () {
-    return !!this.timeout;
-  }
-
-  private getCacheMaxAge (): Seconds | null {
-    const allow = _.get(this, 'config.caching.allow');
-    const max = _.get(this, 'config.caching.max');
-    return max || (allow ? DEFAULT_CACHE_MAX_AGE : null);
-  }
-
-  private getTimeout (): Milliseconds | null {
-    const msec = _.get(this, 'config.polling.timeout.msec')
-    const unlimited = _.get(this, 'config.polling.timeout.unlimited');
-    return msec || (unlimited ? null : DEFAULT_CLIENT_TIMEOUT);
-  }
-
-  private getPollingInterval (): Milliseconds {
-    return _.get(this, 'config.polling.interval') || DEFAULT_CLIENT_POLLING_INTERVAL;
-  } 
-
-  private getDeadline (): number | null {
-    return this.useTimeout
-      ? (Date.now() + this.timeout)
-      : null;
-  }
-
-  async createTask(input: TInput, priority?: Priority): Promise<TaskId> {
+  public async createTask(input: TInput, priority?: Priority): Promise<TaskId> {
     if (this.allowCache) {
       this.logger.debug('Checking cache...');
       const cachedTaskId = await this.repo.checkCache(input, this.cacheMaxAge);
@@ -70,7 +48,7 @@ export class Client<TInput, TOutput> implements IDisposable {
     return task.id;
   }
 
-  async getTask(id: TaskId): Promise<TaskResult<TOutput>> {
+  public async getTask(id: TaskId): Promise<TaskResult<TOutput>> {
     const task = await this.repo.get(id);
     // TODO: Error handling and validation;
     return {
@@ -79,7 +57,7 @@ export class Client<TInput, TOutput> implements IDisposable {
     }
   }
 
-  async awaitTask(input: TInput, priority?: Priority): Promise<TOutput> {
+  public async awaitTask(input: TInput, priority?: Priority): Promise<TOutput> {
     return new Promise<TOutput>(async (resolve, reject) => {
       const id = await this.createTask(input, priority);
 
@@ -92,12 +70,15 @@ export class Client<TInput, TOutput> implements IDisposable {
             // Should we really update task status here? to cancelled?
             return reject(new PollingTimeoutException(id, this.timeout));
           }
-          this.logger.debug(`Quering task id = ${id}...`);
+          this.logger.debug(`Checking task id = ${id}...`);
           const task = await this.repo.get(id);
+
           if (!task) throw new TaskNotFoundException(id);
           this.logger.debug(`status: ${task.status}`);
+
           if (!task.isFinished) continue;
-          this.logger.info('Task is done.');
+          this.logger.info(`Task id = ${id} is done.`);
+
           switch (task.status) {
             case TaskStatus.done: {
               const output = plainToClass(this.outputCtor, task.output.data);
@@ -126,7 +107,29 @@ export class Client<TInput, TOutput> implements IDisposable {
     });
   }
 
-  dispose(): Promise<void> {
+  public dispose(): Promise<void> {
     return this.repo.dispose();
+  }
+
+  private getCacheMaxAge (): Seconds | null {
+    const allow = _.get(this, 'config.caching.allow');
+    const max = _.get(this, 'config.caching.max');
+    return max || (allow ? DEFAULT_CACHE_MAX_AGE : null);
+  }
+
+  private getTimeout (): Milliseconds | null {
+    const msec = _.get(this, 'config.polling.timeout.msec')
+    const unlimited = _.get(this, 'config.polling.timeout.unlimited');
+    return msec || (unlimited ? null : DEFAULT_CLIENT_TIMEOUT);
+  }
+
+  private getPollingInterval (): Milliseconds {
+    return _.get(this, 'config.polling.interval') || DEFAULT_CLIENT_POLLING_INTERVAL;
+  } 
+
+  private getDeadline (): number | null {
+    return this.useTimeout
+      ? (Date.now() + this.timeout)
+      : null;
   }
 }

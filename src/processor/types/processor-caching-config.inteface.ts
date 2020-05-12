@@ -1,4 +1,4 @@
-import { Seconds } from '../shared';
+import { Seconds } from '../../shared';
 
 export interface ProcessorCachingConfig {
   useCache: true,
