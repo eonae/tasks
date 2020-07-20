@@ -22,7 +22,7 @@
     "class-transformer": "0.2.3",
     "class-validator": "0.12.2",
     "ioredis": "4.16.3",
-    "lodash": "4.17.15",
+    "lodash": "4.17.19",
     "md5": "2.2.1",
     "redis": "3.0.2",
     "uuid": "8.0.0",
